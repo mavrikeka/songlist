@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claire Song Cues</title>
+<style>
+:root{--bg:#151019;--ink:#f6efe6;--dim:#aa9fb0;--accent:#f2b4a0;--card:#241c2b;--line:#3a3042}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 Georgia,"Times New Roman",serif;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 20px;color:var(--dim);font:15px system-ui,sans-serif}
+main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px max(5vw,20px) 260px;max-width:960px;margin:0 auto;width:100%}
+#label{font:600 15px system-ui,sans-serif;color:var(--accent);margin-bottom:10px}
+#cue{font-size:clamp(28px,5vw,46px);line-height:1.2;margin:0 0 26px;text-wrap:balance}
+#status{font:16px system-ui,sans-serif;color:var(--dim);min-height:24px;margin-bottom:14px}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-bottom:24px}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s linear}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+button{font:600 18px system-ui,sans-serif;border:0;border-radius:12px;padding:14px 22px;min-height:54px;cursor:pointer;background:var(--card);color:var(--ink)}
+#go{background:var(--accent);color:#2a1610;flex:1;min-width:200px;font-size:22px}
+#go.stop{background:#e9e1d6}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+details{margin-top:34px;font:15px system-ui,sans-serif}
+summary{cursor:pointer;color:var(--dim);padding:8px 0}
+ol{list-style:none;padding:0;margin:8px 0 0}
+li{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+li.cur{color:var(--accent)}
+li span{flex:1}
+li button{font-size:14px;padding:8px 14px;min-height:40px}
+#pwrap{position:fixed;right:14px;bottom:14px;width:240px;height:200px;border-radius:10px;overflow:hidden;background:#000;opacity:.5}
+#pwrap:hover{opacity:1}
+kbd{font:13px system-ui;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+@media(max-width:600px){#pwrap{width:200px;height:200px;right:8px;bottom:8px}header{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<header>
+  <span>Song cues for the speech</span>
+  <span><kbd>Space</kbd> or <kbd>→</kbd> play or stop · <kbd>←</kbd> back · clicker works too</span>
+</header>
+<main>
+  <div id="label">Loading YouTube player…</div>
+  <p id="cue">Getting ready</p>
+  <div id="status"></div>
+  <div class="bar"><i id="prog"></i></div>
+  <div class="row">
+    <button id="back">← Back</button>
+    <button id="go" disabled>Play ▶</button>
+    <button id="skip">Skip →</button>
+  </div>
+  <details>
+    <summary>Rundown and rehearsal: jump to any snippet</summary>
+    <ol id="list"></ol>
+  </details>
+</main>
+<div id="pwrap"><div id="player"></div></div>
+
+<script>
+{
+const S=[
+ {id:"NNJeKXr1I2w",start:12,end:20,cue:"When I met Claire she had…"},
+ {id:"d2XdmyBtCRQ",start:47,end:49,cue:"Which brought her to Landmark, and I was there looking for…"},
+ {id:"KbI_awR4CKE",start:95,end:106,cue:"We were friends. One of my Landmark assignments was to go on a date a week. One week I didn't have a date set up, and Claire said we can do a mock date…"},
+ {id:"zpOULjyy-n8",start:19,end:41,cue:"So we started dating…"},
+ {id:"gkqfpkTTy2w",start:11,end:37,cue:"But instead, we broke up…"},
+ {id:"qPU8mENUBXk",start:0,end:9,cue:"So she left for Paris in search of la vie en rose. I was cat sitting in her apartment, and I realized…"},
+ {id:"Nuanwn3v-2I",start:0,end:18,cue:"So…"},
+ {id:"aENX1Sf3fgQ",start:94,end:106,cue:"So she came back from Paris, and on September 1st, 2001…"},
+ {id:"AAZQaYKZMTI",start:52,end:69,cue:"And then one day, ten years have gone by. We have two kids, and we had our fun times and our challenges raising them…"},
+ {id:"zj8FlXGPcOQ",start:22,end:63,cue:"As far as Emil is concerned, when he left for college he might as well have said…"},
+ {id:"MQNRKX8GwPo",start:85,end:138,cue:"But in the end, hon…"},
+ {id:"SfdOiWSGFhM",start:102,end:155,cue:"As far as our marriage goes… over the years… I have become…"},
+ {id:"HaZpZQG2z10",start:37,end:60,cue:"But now that we are empty nesters, these last few months have made me realize that…"},
+ {id:"aunVlekXjkE",start:16,end:40,cue:"As you all know, Claire is writing a book about our house, and our life is now…"},
+ {id:"aunVlekXjkE",start:83,end:103,cue:"(No line here. Go straight into the second part of the same song.)"},
+ {id:"d4_QuMkOdCI",start:66,end:129,cue:"Because you do all the yard work, hon. So to wrap up… here we are…"}
+];
+const $=id=>document.getElementById(id);
+let i=0,playing=false,ready=false,fading=false,timer=null,ramp=null,player=null;
+const fmt=s=>Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0");
+
+$("list").innerHTML=S.map((s,n)=>`<li data-n="${n}"><b>${n+1}</b><span>${fmt(s.start)}–${fmt(s.end)} · ${s.end-s.start}s · ${s.cue.slice(0,60)}${s.cue.length>60?"…":""}</span><button data-j="${n}">Jump</button></li>`).join("");
+
+function render(){
+  const done=i>=S.length;
+  $("go").classList.toggle("stop",playing);
+  $("back").disabled=playing||i===0;
+  $("skip").disabled=done;
+  document.querySelectorAll("#list li").forEach(li=>li.classList.toggle("cur",+li.dataset.n===i));
+  if(done){
+    $("label").textContent="End of the speech";
+    $("cue").textContent="That's the last song. Raise a glass.";
+    $("go").textContent="Start over";
+    $("status").textContent="";
+    $("prog").style.width="0";
+    return;
+  }
+  const s=S[i];
+  $("label").textContent=`Snippet ${i+1} of ${S.length} · ${s.end-s.start} seconds`;
+  $("cue").textContent=s.cue;
+  $("go").textContent=playing?"Stop ■":`Play ${i+1} ▶`;
+  if(!playing){$("status").textContent=ready?"Say the line, then tap Play or press space.":"";$("prog").style.width="0";}
+}
+
+function fadeTo(target,ms){
+  clearInterval(ramp);
+  const from=player.getVolume?player.getVolume():100,steps=Math.max(1,Math.round(ms/40));let k=0;
+  ramp=setInterval(()=>{k++;player.setVolume(Math.round(from+(target-from)*k/steps));if(k>=steps)clearInterval(ramp);},40);
+}
+
+function play(){
+  if(!ready)return;
+  const s=S[i];
+  playing=true;fading=false;
+  player.setVolume(0);
+  player.loadVideoById({videoId:s.id,startSeconds:s.start,endSeconds:s.end});
+  setTimeout(()=>fadeTo(100,350),150);
+  clearInterval(timer);timer=setInterval(tick,100);
+  $("status").textContent="Loading…";
+  render();
+}
+
+function tick(){
+  if(!playing)return;
+  const s=S[i],st=player.getPlayerState(),t=player.getCurrentTime();
+  if(st!==1||t<s.start-1||t>s.end+2)return;
+  const len=s.end-s.start,rem=s.end-t,f=Math.min(1,len/4);
+  $("prog").style.width=Math.min(100,Math.max(0,(t-s.start)/len*100))+"%";
+  $("status").textContent=`Playing · ${Math.max(0,Math.ceil(rem))}s left`;
+  if(rem<=f&&!fading){fading=true;fadeTo(0,Math.max(100,rem*1000));}
+  if(rem<=0.05)finish();
+}
+
+function finish(){
+  clearInterval(timer);clearInterval(ramp);
+  try{player.pauseVideo();}catch(e){}
+  playing=false;fading=false;i++;
+  render();
+  if(i<S.length)setTimeout(()=>{if(!playing)player.cueVideoById({videoId:S[i].id,startSeconds:S[i].start});},300);
+}
+
+function stopNow(){
+  if(fading)return;
+  fading=true;fadeTo(0,500);
+  setTimeout(finish,550);
+}
+
+function go(){
+  if(i>=S.length){i=0;render();return;}
+  playing?stopNow():play();
+}
+function jump(n){
+  if(playing){clearInterval(timer);clearInterval(ramp);try{player.pauseVideo();}catch(e){}playing=false;fading=false;}
+  i=Math.max(0,Math.min(S.length,n));render();
+}
+
+$("go").addEventListener("click",go);
+$("back").addEventListener("click",()=>jump(i-1));
+$("skip").addEventListener("click",()=>jump(i+1));
+$("list").addEventListener("click",e=>{const b=e.target.closest("button[data-j]");if(b)jump(+b.dataset.j);});
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="SUMMARY")return;
+  if([" ","ArrowRight","PageDown","Enter"].includes(e.key)){e.preventDefault();go();}
+  else if(["ArrowLeft","PageUp"].includes(e.key)&&!playing){e.preventDefault();jump(i-1);}
+});
+
+window.onYouTubeIframeAPIReady=()=>{
+  player=new YT.Player("player",{width:240,height:200,videoId:S[0].id,
+    playerVars:{playsinline:1,controls:0,rel:0,start:S[0].start},
+    events:{
+      onReady:()=>{ready=true;$("go").disabled=false;render();},
+      onStateChange:e=>{if(e.data===0&&playing)finish();},
+      onError:e=>{
+        clearInterval(timer);playing=false;fading=false;render();
+        $("status").textContent=`Snippet ${i+1} won't play here (YouTube error ${e.data}). Tap Skip, or swap in another upload of the song.`;
+      }
+    }});
+};
+render();
+const tag=document.createElement("script");tag.src="https://www.youtube.com/iframe_api";document.body.appendChild(tag);
+}
+</script>
+</body>
+</html>
