@@ -59,25 +59,25 @@ kbd{font:13px system-ui;background:var(--card);border:1px solid var(--line);bord
 <script>
 {
 const S=[
- {id:"NNJeKXr1I2w",start:12,end:20,cue:"When I met Claire she had…"},
- {id:"d2XdmyBtCRQ",start:47,end:49,cue:"Which brought her to Landmark, and I was there looking for…"},
+ {id:"NNJeKXr1I2w",start:13,end:21,cue:"When I met Claire she had…"},
+ {id:"d2XdmyBtCRQ",start:47,end:50,cue:"Which brought her to Landmark, and I was there looking for…"},
  {id:"KbI_awR4CKE",start:95,end:106,cue:"We were friends. One of my Landmark assignments was to go on a date a week. One week I didn't have a date set up, and Claire said we can do a mock date…"},
  {id:"zpOULjyy-n8",start:19,end:41,cue:"So we started dating…"},
- {id:"gkqfpkTTy2w",start:11,end:37,cue:"But instead, we broke up…"},
- {id:"qPU8mENUBXk",start:0,end:9,cue:"So she left for Paris in search of la vie en rose. I was cat sitting in her apartment, and I realized…"},
- {id:"Nuanwn3v-2I",start:0,end:18,cue:"So…"},
- {id:"aENX1Sf3fgQ",start:94,end:106,cue:"So she came back from Paris, and on September 1st, 2001…"},
- {id:"AAZQaYKZMTI",start:52,end:69,cue:"And then one day, ten years have gone by. We have two kids, and we had our fun times and our challenges raising them…"},
- {id:"zj8FlXGPcOQ",start:22,end:63,cue:"As far as Emil is concerned, when he left for college he might as well have said…"},
- {id:"MQNRKX8GwPo",start:85,end:138,cue:"But in the end, hon…"},
- {id:"SfdOiWSGFhM",start:102,end:155,cue:"As far as our marriage goes… over the years… I have become…"},
+ {id:"gkqfpkTTy2w",start:11,end:34,cue:"But instead, we broke up…"},
+ {id:"qPU8mENUBXk",start:0,end:9,cue:"So she left for Paris in search of la vie en rose."},
+ {id:"Nuanwn3v-2I",start:0,end:18,cue:"I was cat sitting in her apartment… and I realized…"},
+ {id:"aENX1Sf3fgQ",start:94,end:106,cue:"So…"},
+ {id:"AAZQaYKZMTI",start:52,end:69,cue:"So she came back from Paris, and September 1st, 2001…"},
+ {id:"zj8FlXGPcOQ",start:22,end:63,cue:"And then one day you find ten years have gone behind you. We have two kids, and we had our fun times and challenges raising them…"},
+ {id:"MQNRKX8GwPo",start:85,end:138,cue:"As far as Emil is concerned, when he left for college he might as well have said…"},
+ {id:"SfdOiWSGFhM",start:102,end:155,cue:"But in the end, hon, the kids are alright. As far as our marriage goes… over the years… I have become comfortably numb."},
  {id:"HaZpZQG2z10",start:37,end:60,cue:"But now that we are empty nesters, these last few months have made me realize that…"},
- {id:"aunVlekXjkE",start:16,end:40,cue:"As you all know, Claire is writing a book about our house, and our life is now…"},
- {id:"aunVlekXjkE",start:83,end:103,cue:"(No line here. Go straight into the second part of the same song.)"},
+ {id:"aunVlekXjkE",start:16,end:40,cue:"And this is how our life is now…"},
+ {id:"aunVlekXjkE",start:83,end:103,cue:"As you all know, Claire is writing a book about our house, and…"},
  {id:"d4_QuMkOdCI",start:66,end:129,cue:"Because you do all the yard work, hon. So to wrap up… here we are…"}
 ];
 const $=id=>document.getElementById(id);
-let i=0,playing=false,ready=false,fading=false,timer=null,ramp=null,player=null;
+let i=0,playing=false,ready=false,fading=false,timer=null,ramp=null,player=null,loadAt=0,playAt=0,seeked=false;
 const fmt=s=>Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0");
 
 $("list").innerHTML=S.map((s,n)=>`<li data-n="${n}"><b>${n+1}</b><span>${fmt(s.start)}–${fmt(s.end)} · ${s.end-s.start}s · ${s.cue.slice(0,60)}${s.cue.length>60?"…":""}</span><button data-j="${n}">Jump</button></li>`).join("");
@@ -112,7 +112,7 @@ function fadeTo(target,ms){
 function play(){
   if(!ready)return;
   const s=S[i];
-  playing=true;fading=false;
+  playing=true;fading=false;loadAt=Date.now();playAt=0;seeked=false;
   player.setVolume(0);
   player.loadVideoById({videoId:s.id,startSeconds:s.start,endSeconds:s.end});
   setTimeout(()=>fadeTo(100,350),150);
@@ -123,10 +123,15 @@ function play(){
 
 function tick(){
   if(!playing)return;
-  const s=S[i],st=player.getPlayerState(),t=player.getCurrentTime();
-  if(st!==1||t<s.start-1||t>s.end+2)return;
-  const len=s.end-s.start,rem=s.end-t,f=Math.min(1,len/4);
-  $("prog").style.width=Math.min(100,Math.max(0,(t-s.start)/len*100))+"%";
+  const s=S[i],st=player.getPlayerState(),t=player.getCurrentTime(),len=s.end-s.start;
+  if(st!==1)return;
+  if(!playAt)playAt=Date.now();
+  // If YouTube ignored the start time, jump to it once
+  if((t<s.start-1||t>s.end+1)&&!seeked&&Date.now()-loadAt<6000){seeked=true;player.seekTo(s.start,true);playAt=Date.now();return;}
+  // Backstop: stop by the clock even if the video's own time misbehaves
+  const elapsed=(Date.now()-playAt)/1000;
+  const rem=Math.min(s.end-t,len-elapsed+0.3),f=Math.min(1,len/4);
+  $("prog").style.width=Math.min(100,Math.max(0,(len-rem)/len*100))+"%";
   $("status").textContent=`Playing · ${Math.max(0,Math.ceil(rem))}s left`;
   if(rem<=f&&!fading){fading=true;fadeTo(0,Math.max(100,rem*1000));}
   if(rem<=0.05)finish();
